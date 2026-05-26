@@ -1,0 +1,202 @@
+name: Evaluacion de Pruebas - Ligas
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+
+jobs:
+  test:
+    name: Ejecutar pruebas y calcular nota
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Clonar repositorio
+        uses: actions/checkout@v3
+
+      - name: Instalar Java
+        uses: actions/setup-java@v3
+        with:
+          java-version: "17"
+          distribution: "temurin"
+
+      - name: Compilar archivos
+        id: compilar
+        continue-on-error: true
+        run: |
+          mkdir -p bin
+          if javac -cp "lib/*" -d bin $(find src -name "*.java"); then
+            echo "salida=0" >> $GITHUB_ENV
+          else
+            echo "salida=1" >> $GITHUB_ENV
+          fi
+
+      - name: Verificar compilacion
+        if: env.salida == '1'
+        run: |
+          nombre=$(grep '^STUDENT_NAME='    student.env | cut -d '=' -f2 | xargs)
+          correo=$(grep '^STUDENT_EMAIL='   student.env | cut -d '=' -f2 | xargs)
+          fila=$(grep   '^FILA_ESTUDIANTE=' student.env | cut -d '=' -f2 | xargs)
+
+          USUARIO=$(echo "$correo" | cut -d '@' -f1)
+          REPO=$(basename "$GITHUB_REPOSITORY")
+          ARCHIVO="$USUARIO-$REPO.txt"
+
+          echo "::warning title=Error de compilacion::El codigo no compilo. Nota final: 0 / 10"
+          {
+            echo "Estudiante: $nombre"
+            echo "Correo: $correo"
+            echo "Fila: $fila"
+            echo "---"
+            echo "Error: No se pudo compilar el codigo"
+            echo "Nota final: 0 / 10"
+          } > "$ARCHIVO"
+
+          echo "ARCHIVO=$ARCHIVO" >> $GITHUB_ENV
+
+      - name: Ejecutar pruebas
+        if: env.salida == '0'
+        continue-on-error: true
+        run: |
+          mkdir -p resultados
+          java -cp "bin:lib/*" \
+            org.junit.platform.console.ConsoleLauncher \
+            --select-class "test.LeagueControllerTest" \
+            --details tree \
+            --disable-ansi-colors \
+            --reports-dir resultados/ \
+          | tee resultados/salida.txt
+
+      - name: Verificar salida en consola
+        if: env.salida == '0'
+        continue-on-error: true
+        run: |
+          java -cp "bin:lib/*" App > resultados/consola.txt 2>&1 || true
+
+      - name: Leer nombre, correo y fila del estudiante
+        if: env.salida == '0'
+        id: estudiante
+        run: |
+          nombre=$(grep '^STUDENT_NAME='    student.env | cut -d '=' -f2 | xargs)
+          correo=$(grep '^STUDENT_EMAIL='   student.env | cut -d '=' -f2 | xargs)
+          fila=$(grep   '^FILA_ESTUDIANTE=' student.env | cut -d '=' -f2 | xargs | tr '[:lower:]' '[:upper:]')
+          echo "nombre=$nombre" >> $GITHUB_OUTPUT
+          echo "correo=$correo" >> $GITHUB_OUTPUT
+          echo "fila=$fila"     >> $GITHUB_OUTPUT
+
+      - name: Calcular nota
+        if: env.salida == '0'
+        run: |
+          NOMBRE="${{ steps.estudiante.outputs.nombre }}"
+          CORREO="${{ steps.estudiante.outputs.correo }}"
+          FILA="${{ steps.estudiante.outputs.fila }}"
+
+          # ---------- Parsear resultados XML por test ----------
+          XML_FILE=$(find resultados -name "TEST-*.xml" 2>/dev/null | head -1)
+
+          TEST1_PASS=false
+          TEST2_PASS=false
+          TEST3_PASS=false
+
+          check_test() {
+            local name="$1"
+            local xml="$2"
+            python3 -c "
+import xml.etree.ElementTree as ET, sys
+try:
+    root = ET.parse('$xml').getroot()
+    for tc in root.findall('.//testcase'):
+        if tc.get('name') == '$name':
+            print('false' if (tc.find('failure') is not None or tc.find('error') is not None) else 'true')
+            sys.exit()
+except Exception:
+    pass
+print('false')
+"
+          }
+
+          if [ -n "$XML_FILE" ]; then
+            TEST1_PASS=$(check_test "testGetTotalActiveGoals()"    "$XML_FILE")
+            TEST2_PASS=$(check_test "testMetodoOrdenamiento()"     "$XML_FILE")
+            TEST3_PASS=$(check_test "testBusquedaBinariaPorFila()" "$XML_FILE")
+          fi
+
+          # ---------- Validar salida en consola ----------
+          CONSOLA_PASS=false
+          if [ -f resultados/consola.txt ]; then
+            if grep -qi "original"  resultados/consola.txt && \
+               grep -qi "ordenado"  resultados/consola.txt && \
+               grep -qi "encontra"  resultados/consola.txt; then
+              CONSOLA_PASS=true
+            fi
+          fi
+
+          # ---------- Calcular puntaje ponderado ----------
+          NOTA=0
+          [ "$TEST1_PASS"    = "true" ] && NOTA=$((NOTA + 2))
+          [ "$TEST2_PASS"    = "true" ] && NOTA=$((NOTA + 3))
+          [ "$TEST3_PASS"    = "true" ] && NOTA=$((NOTA + 3))
+          [ "$CONSOLA_PASS"  = "true" ] && NOTA=$((NOTA + 2))
+
+          # ---------- Etiquetas de estado ----------
+          if [ "$TEST1_PASS" = "true" ]; then
+            T1="[OK] Test 1 - Campo calculado: 2/2 pts"
+          else
+            T1="[--] Test 1 - Campo calculado: 0/2 pts"
+          fi
+
+          if [ "$TEST2_PASS" = "true" ]; then
+            T2="[OK] Test 2 - Ordenamiento: 3/3 pts"
+          else
+            T2="[--] Test 2 - Ordenamiento: 0/3 pts"
+          fi
+
+          if [ "$TEST3_PASS" = "true" ]; then
+            T3="[OK] Test 3 - Busqueda binaria: 3/3 pts"
+          else
+            T3="[--] Test 3 - Busqueda binaria: 0/3 pts"
+          fi
+
+          if [ "$CONSOLA_PASS" = "true" ]; then
+            TC="[OK] Salida en consola: 2/2 pts"
+          else
+            TC="[--] Salida en consola: 0/2 pts"
+          fi
+
+          # ---------- Generar archivo de resultado ----------
+          USUARIO=$(echo "$CORREO" | cut -d '@' -f1)
+          REPO=$(basename "$GITHUB_REPOSITORY")
+          ARCHIVO="$USUARIO-$REPO.txt"
+
+          {
+            echo "Estudiante: $NOMBRE"
+            echo "Correo: $CORREO"
+            echo "Fila: $FILA"
+            echo "---"
+            echo "$T1"
+            echo "$T2"
+            echo "$T3"
+            echo "$TC"
+            echo "---"
+            echo "Nota final: $NOTA / 10"
+          } > "$ARCHIVO"
+
+          echo "ARCHIVO=$ARCHIVO" >> $GITHUB_ENV
+
+          # ---------- Notificaciones en GitHub Actions ----------
+          echo "::notice title=Nota Final::$NOMBRE obtuvo $NOTA / 10 (Fila $FILA)"
+          echo "::notice title=Detalle::$T1 | $T2 | $T3 | $TC"
+
+          # Advertir por cada test fallido
+          [ "$TEST1_PASS"   = "false" ] && echo "::warning title=Test 1 Fallido::getTotalActiveGoals() no paso la validacion"
+          [ "$TEST2_PASS"   = "false" ] && echo "::warning title=Test 2 Fallido::El metodo de ordenamiento de la fila $FILA no paso la validacion"
+          [ "$TEST3_PASS"   = "false" ] && echo "::warning title=Test 3 Fallido::binarySearchByTotalActiveGoals no paso la validacion"
+          [ "$CONSOLA_PASS" = "false" ] && echo "::warning title=Consola Incompleta::La salida en consola no muestra los elementos requeridos (original, ordenado, busquedas)"
+
+      - name: Subir resultado
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ${{ env.ARCHIVO }}
+          path: ${{ env.ARCHIVO }}
