@@ -129,9 +129,9 @@ java -cp "bin:lib/*" App
 
 | Requerimiento                    | Puntos |
 |----------------------------------|--------|
-| Campo calculado (Test 1)         |   2    |
-| Metodo de ordenamiento (Test 2)  |   3    |
-| Busqueda binaria (Test 3)        |   3    |
+| Campo calculado (Test 1)         |   2.6  |
+| Metodo de ordenamiento (Test 2)  |   2.6  |
+| Busqueda binaria (Test 3)        |   2.6  |
 | Salida en consola (main)         |   2    |
 | **Total**                        | **10** |
 
