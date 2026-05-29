@@ -29,7 +29,16 @@ public class LeagueController {
      */
     public League[] sortInsertionDesc(League[] leagues) {
         // TODO: Implementar (solo si su fila es B)
-        throw new UnsupportedOperationException("Metodo sortInsertionDesc no implementado");
+        for(int i=1; i< leagues.length; i++){
+            League aux = leagues[i];
+            int j=i-1;
+            while(j>=0 && leagues[j].getTotalActiveGoals()<aux.getTotalActiveGoals()){
+                leagues[j+1]=leagues[j];
+                j--;
+            }
+            leagues[j+1]=aux;
+        }
+        return leagues;
     }
 
     /**
@@ -48,7 +57,21 @@ public class LeagueController {
      */
     public League binarySearchByTotalActiveGoals(League[] leagues, int totalActiveGoals) {
         // TODO: Implementar
-        throw new UnsupportedOperationException("Metodo binarySearchByTotalActiveGoals no implementado");
+        int bajo=0;
+        int alto=leagues.length -1;
+        while(bajo<=alto){
+            int central = (bajo+alto)/2;
+            int valorCentral = leagues[central].getTotalActiveGoals();
+            if(valorCentral==totalActiveGoals){
+                return leagues[central];
+            }else if(valorCentral<totalActiveGoals){
+                alto=central-1;
+                
+            }else{
+                bajo=central+1;
+            }
+        }
+        return null;
     }
 
     /**

@@ -1,4 +1,5 @@
-
+import models.*;
+import controllers.*;
 public class App {
 
         /**
@@ -158,7 +159,40 @@ public class App {
                 // Ejemplo:
                 // System.out.println("Listado original:");
                 // controller.printLeagues(leagues);
+                League[] ligas = getLeagues();
+                LeagueController controller = new LeagueController();
 
+                System.out.println("LIGAS ORIGINALES");
+                for(League l:ligas){
+                        System.out.println(l.getName() + " - Goles activos " + l.getTotalActiveGoals());
+                }
+
+                System.out.println();
+                ligas = controller.sortInsertionDesc(ligas);
+                System.out.println("LIGAS ORDENADAS DESCENDENTEMENTE");
+                for(League l:ligas){
+                        System.out.println(l.getName() + " - Goles activos " + l.getTotalActiveGoals());
+                }
+
+                System.out.println();
+                System.out.println("Busqueda 1");
+                System.out.println("Busquedad de liga para 67 goles: ");
+                League resultado1 = controller.binarySearchByTotalActiveGoals(ligas, 67);
+                if(resultado1!=null){
+                        System.out.println("La liga con 67 goles se encontro");
+                }else{
+                        System.out.println("La liga no fue encontrada");
+                }
+
+                System.out.println();
+                System.out.println("Busqueda 2");
+                System.out.println("Busquedad de liga para 40 goles: ");
+                League resultado2 = controller.binarySearchByTotalActiveGoals(ligas, 40);
+                if(resultado2!=null){
+                        System.out.println("La liga con 67 goles se encontro");
+                }else{
+                        System.out.println("La liga no fue encontrada");
+                }
                 // TODO: Crear una copia del arreglo y aplicar el metodo de ordenamiento de su
                 // fila
                 // Fila A: controller.sortSelectionAsc(copia)
